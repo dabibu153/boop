@@ -3,10 +3,15 @@ import "./App.css";
 import "react-notifications/lib/notifications.css";
 import {
   NotificationContainer,
-  NotificationManager,
 } from "react-notifications";
 
-import Modal from "react-modal";
+import {
+  pieceSelected,
+  boardClicked,
+  upgrade,
+  checkForUpgrade,
+  tactical
+} from "./utility";
 
 function App() {
   const rows = [0, 1, 2, 3, 4, 5];
@@ -19,17 +24,41 @@ function App() {
 
   const [p2Pool, setP2Pool] = useState({ kittens: 8, cats: 0 });
 
+  const [p1PoolIdx, setP1PoolIdx] = useState({ kittens: 8, cats: 0 });
+
+  const [p2PoolIdx, setP2PoolIdx] = useState({ kittens: 8, cats: 0 });
+
+  const [promotableArray, setPromotableArray] = useState([]);
+
+  const [highlightedUpgradeBlocks, setHighlightedUpgradeBlocks] = useState([]);
+
+  const [highlightedTacticalBlock, setHighlightedTacticalBlock] = useState();
+
+  const [promotableArrayRenderIdx, setPromotableArrayRenderIdx] = useState(0);
+
+  const [tacticalRenderIdx, setTacticalRenderIdx] = useState(0);
+
+  const [showPromotionBlock, setShowPromotionBlock] = useState(false);
+
+  const [showTacticalBlock, setShowTacticalBlock] = useState(false);
+
+  const [showSubTacticalBlock, setSubShowTacticalBlock] = useState(false);
+
   const [playerWon, setPlayerWon] = useState();
 
+  const [catChoosen, setCatChoosen] = useState();
+
+  const [disableBoard, setDisableBoard] = useState(false);
+
   const [p1, setP1] = useState([
-    { piece: "kitten1", image: "gray_kitten.png", position: "" },
-    { piece: "kitten2", image: "gray_kitten.png", position: "" },
-    { piece: "kitten3", image: "gray_kitten.png", position: "" },
-    { piece: "kitten4", image: "gray_kitten.png", position: "" },
-    { piece: "kitten5", image: "gray_kitten.png", position: "" },
-    { piece: "kitten6", image: "gray_kitten.png", position: "" },
-    { piece: "kitten7", image: "gray_kitten.png", position: "" },
-    { piece: "kitten8", image: "gray_kitten.png", position: "" },
+    { piece: "kitten1", image: "grey_kitten.png", position: "" },
+    { piece: "kitten2", image: "grey_kitten.png", position: "" },
+    { piece: "kitten3", image: "grey_kitten.png", position: "" },
+    { piece: "kitten4", image: "grey_kitten.png", position: "" },
+    { piece: "kitten5", image: "grey_kitten.png", position: "" },
+    { piece: "kitten6", image: "grey_kitten.png", position: "" },
+    { piece: "kitten7", image: "grey_kitten.png", position: "" },
+    { piece: "kitten8", image: "grey_kitten.png", position: "" },
   ]);
 
   const [p2, setP2] = useState([
@@ -42,6 +71,49 @@ function App() {
     { piece: "kitten7", image: "orange_kitten.png", position: "" },
     { piece: "kitten8", image: "orange_kitten.png", position: "" },
   ]);
+
+  useEffect(() => {
+    setCatChoosen();
+    const newActiveSideLatestPieceInfo = activeSide === "p1" ? p1 : p2;
+
+    let anythingInPool = false;
+
+    newActiveSideLatestPieceInfo.forEach((piece) => {
+      if (piece.position === "") anythingInPool = true;
+    });
+
+    if (!anythingInPool) {
+      setDisableBoard(true);
+      setSubShowTacticalBlock(true);
+      setShowTacticalBlock(true);
+      setHighlightedTacticalBlock(newActiveSideLatestPieceInfo[0].position);
+      const { p1BoardUpdate, p2BoardUpdate } = checkForUpgrade(p1, p2);
+      if (
+        p1BoardUpdate.existingSetsOfThreeCats.length &&
+        !p2BoardUpdate.existingSetsOfThreeCats.length
+      )
+        setPlayerWon("Grey cats WON !!!");
+      else if (
+        !p1BoardUpdate.existingSetsOfThreeCats.length &&
+        p2BoardUpdate.existingSetsOfThreeCats.length
+      )
+        setPlayerWon("Orange cats WON !!!");
+      else if (
+        p1BoardUpdate.existingSetsOfThreeCats.length &&
+        p2BoardUpdate.existingSetsOfThreeCats.length
+      )
+        setPlayerWon("It was a draw !!!");
+
+      if (activeSide === "p1" && p1BoardUpdate.existingSetsOfThreeAny.length) {
+        return setPromotableArray(p1BoardUpdate.existingSetsOfThreeAny);
+      } else if (
+        activeSide === "p2" &&
+        p2BoardUpdate.existingSetsOfThreeAny.length
+      ) {
+        return setPromotableArray(p2BoardUpdate.existingSetsOfThreeAny);
+      }
+    }
+  }, [activeSide]);
 
   useEffect(() => {
     const pieceName = [];
@@ -68,346 +140,375 @@ function App() {
     }
 
     let playableP1Kittens = 0,
-      playableP2Kittens = 0;
+      playableP2Kittens = 0,
+      playableP1Cats = 0,
+      playableP2Cats = 0;
 
     p1.forEach((piece) => {
       if (piece.position === "") {
-        playableP1Kittens++;
+        if (piece.piece[0] === "k") playableP1Kittens++;
+        else playableP1Cats++;
       }
     });
 
     p2.forEach((piece) => {
       if (piece.position === "") {
-        playableP2Kittens++;
+        if (piece.piece[0] === "k") playableP2Kittens++;
+        else playableP2Cats++;
       }
     });
 
     setP1Pool({
       kittens: playableP1Kittens,
-      cats: 0,
+      cats: playableP1Cats,
     });
 
     setP2Pool({
       kittens: playableP2Kittens,
-      cats: 0,
+      cats: playableP2Cats,
     });
   }, [p1, p2]);
 
-  const boardClicked = (row, col) => {
-    if (!activePiece)
-      return NotificationManager.warning(
-        `${activeSide} please select a cat first`
-      );
-    const filledSpots = [];
-    p1.forEach((piece) => filledSpots.push(piece.position));
-    p2.forEach((piece) => filledSpots.push(piece.position));
-    if (filledSpots.includes(`${row}${col}`))
-      return NotificationManager.warning(
-        `Cats don't like other cats sitting on them :()`
-      );
-    const p1Copy = p1.map((item) => ({ ...item }));
-    const p2Copy = p2.map((item) => ({ ...item }));
-
-    const surroundingPosArray = [];
-    const movementBluePrint = [
-      [+1, -1],
-      [+1, +0],
-      [+1, +1],
-      [+0, -1],
-      [+0, +1],
-      [-1, -1],
-      [-1, +0],
-      [-1, +1],
-    ];
-    movementBluePrint.forEach((movement) =>
-      surroundingPosArray.push(
-        `${Number(row) + movement[0]}${Number(col) + movement[1]}`
-      )
-    );
-
-    const piecesOnThosePositions = [];
-
-    filledSpots.forEach((oneSpot) => {
-      if (surroundingPosArray.includes(oneSpot)) {
-        piecesOnThosePositions.push(oneSpot);
-      }
-    });
-
-    const definitelyMovablePieces = [];
-
-    console.log("piecesOnThosePositions", piecesOnThosePositions);
-
-    for (const movablePiece of piecesOnThosePositions) {
-      const direction = [
-        (Number(movablePiece[0]) - row) * 2,
-        (Number(movablePiece[1]) - col) * 2,
-      ];
-      console.log(direction);
-      if (
-        !filledSpots.includes(
-          `${Number(row) + direction[0]}${Number(col) + direction[1]}`
-        )
-      ) {
-        definitelyMovablePieces.push({
-          original: movablePiece,
-          new: `${Number(row) + direction[0]}${Number(col) + direction[1]}`,
-        });
-      }
-    }
-
-    const legalPositions = [];
-
-    for (const oneRow of rows) {
-      for (const oneCol of cols) {
-        legalPositions.push(`${oneRow}${oneCol}`);
-      }
-    }
-
-    for (const updatedPos of definitelyMovablePieces) {
-      for (const p1Piece of p1Copy) {
-        if (updatedPos.original === p1Piece.position) {
-          if (legalPositions.includes(updatedPos.new))
-            p1Piece.position = updatedPos.new;
-          else p1Piece.position = "";
-        }
-      }
-      for (const p2Piece of p2Copy) {
-        if (updatedPos.original === p2Piece.position) {
-          if (legalPositions.includes(updatedPos.new))
-            p2Piece.position = updatedPos.new;
-          else p2Piece.position = "";
-        }
-      }
-    }
-
-    const pool = activeSide === "p1" ? p1Copy : p2Copy;
-
-    for (const piece of pool) {
-      if (piece.piece === activePiece.piece) {
-        piece.position = `${row}${col}`;
-        break;
-      }
-    }
-
-    const setsOfThree = [
-      [0, -1],
-      [0, +1],
-      [-1, +0],
-      [+1, +0],
-      [-1, -1],
-      [+1, +1],
-      [+1, -1],
-      [+1, -1],
-    ];
-
-    const calculateNewPosFromOld = (current, posArray) => {
-      return `${Number(current[0]) + posArray[0]}${
-        Number(current[1]) + posArray[1]
-      }`;
-    };
-
-    const checkIfWin = (allPiecesOneSide) => {
-      const activeSidePos = [];
-
-      allPiecesOneSide.forEach((piece) =>
-        piece.position !== "" ? activeSidePos.push(piece.position) : undefined
-      );
-
-      const existingSetsOfThree = [];
-
-      for (const onePiece of allPiecesOneSide) {
-        if (onePiece.position !== "") {
-          const toLeft = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[0]
-          );
-          const toRight = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[1]
-          );
-          const toTop = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[2]
-          );
-          const toBottom = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[3]
-          );
-          const toTopLeft = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[4]
-          );
-          const toBottomRight = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[5]
-          );
-          const toTopRight = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[6]
-          );
-          const toBottomLeft = calculateNewPosFromOld(
-            onePiece.position,
-            setsOfThree[7]
-          );
-
-          const checkIfSetExists = (oneSide, otherSide) => {
-            if (
-              activeSidePos.includes(oneSide) &&
-              activeSidePos.includes(otherSide)
-            ) {
-              existingSetsOfThree.push([oneSide, onePiece.position, otherSide]);
-            }
-          };
-
-          checkIfSetExists(toLeft, toRight);
-          checkIfSetExists(toTop, toBottom);
-          checkIfSetExists(toTopLeft, toBottomRight);
-          checkIfSetExists(toTopRight, toBottomLeft);
-        }
-      }
-
-      if (existingSetsOfThree.length) return true;
-    };
-
-    const didP1Win = checkIfWin(p1Copy);
-    const didP2Win = checkIfWin(p2Copy);
-
-    if (didP1Win && !didP2Win) setPlayerWon("p1");
-    else if (!didP1Win && didP2Win) setPlayerWon("p2");
-    else if (didP1Win && didP2Win) setPlayerWon("draw");
-
-    setP1(p1Copy);
-    setP2(p2Copy);
-
-    setActiveSide(activeSide === "p1" ? "p2" : "p1");
-    setActivePiece();
-  };
-
-  const pieceSelected = (side, type) => {
-    if (side !== activeSide)
-      return NotificationManager.warning(
-        "Forgot your colour already? not a cat person ig :("
-      );
-    if (type === "cat")
-      return NotificationManager.warning(
-        "Cats are not in the mood rn. Please play with the kittens :("
-      );
-    const pool = side === "p1" ? p1 : p2;
-    let pieceAvailable = false;
-    for (const onePiece of pool) {
-      if (onePiece.position === "") {
-        pieceAvailable = onePiece;
-        break;
-      }
-    }
-    if (pieceAvailable) {
-      setActivePiece({ piece: pieceAvailable.piece });
-    } else {
-      return NotificationManager.error("pool empty oh nooo....");
-      //more code for that later
-    }
-  };
 
   return (
     <div className="relative">
-      {playerWon ? (
-        <div className="absolute w-screen flex items-center justify-center text-3xl font-bold bg-sky-500/50 p-4 text-white">
-          {playerWon === "p1"
-            ? "Grey Cats WON!!!"
-            : playerWon === "p2"
-            ? "Orange Cats WON!!!"
-            : "T'was a DRAW!!!"}
-        </div>
-      ) : (
-        <div></div>
-      )}
-      <div className="h-screen w-screen flex items-center justify-between">
-        <div className="ml-10">
-          <div
-            onClick={() => pieceSelected("p1", "kitten")}
-            className="flex items-center justify-center cursor-pointer"
-          >
-            <img
-              className="h-20 w-20"
-              src={`/assets/gray_kitten.png`}
-              alt="yeet"
-            />{" "}
-            <span className="text-3xl font-bold bg-sky-500/50 p-4 text-white rounded-lg">
-              x {p1Pool.kittens}
-            </span>
+      <div className="h-screen w-screen flex flex-row">
+        <div
+          className={`basis-3/5 bg-[#97DECE] flex flex-col justify-between ${
+            disableBoard ? "pointer-events-none" : ""
+          }`}
+        >
+          <div className="w-full flex items-center justify-center text-3xl font-bold bg-[#439A97] p-4 text-white">
+            {activeSide === "p1" ? "Grey Cat boi" : "Orange Cat boi"}'s Turn
           </div>
-          <div
-            onClick={() => pieceSelected("p1", "cat")}
-            className="flex items-center justify-center cursor-pointer"
-          >
-            <img
-              className="h-20 w-20"
-              src={`/assets/gray_cat.png`}
-              alt="yeet"
-            />{" "}
-            <span className="text-3xl font-bold bg-sky-500/50 p-4 text-white rounded-lg">
-              x {p1Pool.cats}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center justify-center">
-          {cols.map((colVal, colIndex) => (
-            <div className="flex flex-col bg-blue-100">
-              {rows.map((rowVal, rowIndex) => (
-                <div
-                  className={`h-24 w-24 ${
-                    rowIndex % 2 === 0 && colIndex % 2 === 0
-                      ? "bg-blue-300"
-                      : ""
-                  } 
-              ${rowIndex % 2 !== 0 && colIndex % 2 !== 0 ? "bg-blue-300" : ""} 
-                flex`}
-                >
+          <div className="flex items-center justify-center">
+            {cols.map((colVal, colIndex) => (
+              <div className="flex flex-col bg-yellow-100">
+                {rows.map((rowVal, rowIndex) => (
                   <div
-                    onClick={() => {
-                      boardClicked(rowVal, colVal);
-                    }}
-                    className={`flex items-center justify-center h-full w-full`}
-                    id={`${rowVal}${colVal}`}
+                    className={`h-24 w-24 ${
+                      rowIndex % 2 === 0 && colIndex % 2 === 0
+                        ? "bg-yellow-300"
+                        : ""
+                    } 
+              ${rowIndex % 2 !== 0 && colIndex % 2 !== 0 ? "bg-yellow-300" : ""} 
+              ${
+                highlightedUpgradeBlocks.includes(`${rowVal}${colVal}`)
+                  ? "border border-3 border-green-500 bg-green-200"
+                  : ""
+              }
+              ${
+                showSubTacticalBlock &&
+                highlightedTacticalBlock === `${rowVal}${colVal}`
+                  ? "border border-3 border-green-500 bg-green-200"
+                  : ""
+              }
+                flex`}
                   >
-                    {rowVal}
-                    {colVal}
+                    <div
+                      onClick={() => {
+                        boardClicked(
+                          rowVal,
+                          colVal,
+                          activePiece,
+                          setActivePiece,
+                          activeSide,
+                          setActiveSide,
+                          p1,
+                          p2,
+                          setP1,
+                          setP2,
+                          setPlayerWon,
+                          setPromotableArray,
+                          setDisableBoard
+                        );
+                      }}
+                      className={`flex items-center justify-center h-full w-full hover:bg-blue-300`}
+                      id={`${rowVal}${colVal}`}
+                    >
+                      {rowVal}
+                      {colVal}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            ))}
+          </div>
+          {activeSide === "p1" ? (
+            <div className="flex justify-center mb-10">
+              <div
+                onClick={() =>
+                  pieceSelected(
+                    "p1",
+                    "k",
+                    activeSide,
+                    setActivePiece,
+                    p1,
+                    p2,
+                    setCatChoosen
+                  )
+                }
+                className={`flex items-center justify-center cursor-pointer ${
+                  catChoosen === 0 ? "bg-yellow-400" : "bg-[#439A97]"
+                } rounded-lg`}
+              >
+                <img
+                  className="h-16 w-16"
+                  src={`/assets/grey_kitten.png`}
+                  alt="yeet"
+                />{" "}
+                <span className="text-3xl font-bold p-4 text-white">
+                  x {p1Pool.kittens}
+                </span>
+              </div>
+              <div
+                onClick={() =>
+                  pieceSelected(
+                    "p1",
+                    "c",
+                    activeSide,
+                    setActivePiece,
+                    p1,
+                    p2,
+                    setCatChoosen
+                  )
+                }
+                className={`flex items-center justify-center cursor-pointer ${
+                  catChoosen === 1 ? "bg-yellow-400" : "bg-[#439A97]"
+                } rounded-lg ml-4`}
+              >
+                <img
+                  className="h-16 w-16"
+                  src={`/assets/grey_cat.png`}
+                  alt="yeet"
+                />{" "}
+                <span className="text-3xl font-bold p-4 text-white">
+                  x {p1Pool.cats}
+                </span>
+              </div>
             </div>
-          ))}
+          ) : (
+            <div className="flex justify-center mb-10">
+              <div
+                onClick={() =>
+                  pieceSelected(
+                    "p2",
+                    "k",
+                    activeSide,
+                    setActivePiece,
+                    p1,
+                    p2,
+                    setCatChoosen
+                  )
+                }
+                className={`flex items-center justify-center cursor-pointer ${
+                  catChoosen === 0 ? "bg-yellow-400" : "bg-[#439A97]"
+                } rounded-lg`}
+              >
+                <img
+                  className="h-16 w-16"
+                  src={`/assets/orange_kitten.png`}
+                  alt="yeet"
+                />{" "}
+                <span className="text-3xl font-bold p-4 text-white">
+                  x {p2Pool.kittens}
+                </span>
+              </div>
+              <div
+                onClick={() =>
+                  pieceSelected(
+                    "p2",
+                    "c",
+                    activeSide,
+                    setActivePiece,
+                    p1,
+                    p2,
+                    setCatChoosen
+                  )
+                }
+                className={`flex items-center justify-center cursor-pointer ${
+                  catChoosen === 1 ? "bg-yellow-400" : "bg-[#439A97]"
+                } rounded-lg ml-4`}
+              >
+                <img
+                  className="h-16 w-16"
+                  src={`/assets/orange_cat.png`}
+                  alt="yeet"
+                />{" "}
+                <span className="text-3xl font-bold p-4 text-white">
+                  x {p2Pool.cats}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="mr-10">
-          <div
-            onClick={() => pieceSelected("p2", "kitten")}
-            className="flex items-center justify-center cursor-pointer"
-          >
-            <img
-              className="h-20 w-20"
-              src={`/assets/orange_kitten.png`}
-              alt="yeet"
-            />{" "}
-            <span className="text-3xl font-bold bg-sky-500/50 p-4 text-white rounded-lg">
-              x {p2Pool.kittens}
+        <div className="basis-2/5 bg-[#CBEDD5] border-l-8 border-black">
+          {playerWon ? (
+            <div className="flex flex-col items-center justify-center h-full">
+            <span className="font-bold text-xl text-[#439A97] mb-6">
+              {playerWon}
             </span>
-          </div>
-          <div
-            onClick={() => pieceSelected("p2", "cat")}
-            className="flex items-center justify-center cursor-pointer"
-          >
-            <img
-              className="h-20 w-20"
-              src={`/assets/orange_cat.png`}
-              alt="yeet"
-            />{" "}
-            <span className="text-3xl font-bold bg-sky-500/50 p-4 text-white rounded-lg">
-              x {p2Pool.cats}
-            </span>
-          </div>
+            <button
+                        className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded mr-2 h-16 text-lg"
+                        onClick={() => {
+                          window.location.reload(true)
+                        }}
+                      >
+                        Start fresh
+                      </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full">
+              {promotableArray.length ? (
+                <div className="basis-1/2 flex flex-col justify-center items-center h-full">
+                  <span className="font-bold text-xl text-[#439A97] mb-6">
+                    Choose from a set of 3 of your pets in a row and Promote
+                  </span>
+                  {showPromotionBlock ? (
+                    <div className="w-full flex items-center justify-center">
+                      <button
+                        className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded mr-2 h-16 text-lg"
+                        onClick={() => {
+                          if (
+                            promotableArrayRenderIdx <
+                            promotableArray.length - 1
+                          ) {
+                            setHighlightedUpgradeBlocks(
+                              promotableArray[promotableArrayRenderIdx + 1]
+                            );
+                            setPromotableArrayRenderIdx(
+                              promotableArrayRenderIdx + 1
+                            );
+                          } else {
+                            setHighlightedUpgradeBlocks(promotableArray[0]);
+                            setPromotableArrayRenderIdx(0);
+                          }
+                        }}
+                      >
+                        Next cats/kittens
+                      </button>
+                      <button
+                        className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded h-16 text-lg"
+                        onClick={() => {
+                          upgrade(
+                            activeSide,
+                            setActiveSide,
+                            p1,
+                            p2,
+                            setP1,
+                            setP2,
+                            highlightedUpgradeBlocks,
+                            p1PoolIdx,
+                            setP1PoolIdx,
+                            p2PoolIdx,
+                            setP2PoolIdx,
+                            setPromotableArray,
+                            setShowPromotionBlock,
+                            setPromotableArrayRenderIdx,
+                            setHighlightedUpgradeBlocks,
+                            setDisableBoard
+                          );
+                        }}
+                      >
+                        Promote
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full flex items-center justify-center">
+                      <button
+                        className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded h-16 text-lg"
+                        onClick={() => {
+                          setHighlightedUpgradeBlocks(
+                            promotableArray[promotableArrayRenderIdx]
+                          );
+                          setShowPromotionBlock(true);
+                          setSubShowTacticalBlock(false);
+                        }}
+                      >
+                        Show promotable Cats
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : undefined}
+
+              <div className="basis-1/2 flex items-center justify-center">
+                {showTacticalBlock ? (
+                  <div className="flex flex-col items-center justify-center">
+                    <span className="font-bold text-xl text-[#439A97] mb-6">
+                      With no pets to place, choose a kitten to upgrade or a cat
+                      to take back
+                    </span>
+                    {showSubTacticalBlock ? (
+                      <div>
+                        <button
+                          className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded mr-2 h-16 text-lg"
+                          onClick={() => {
+                            const targetArray = activeSide === "p1" ? p1 : p2;
+                            if (tacticalRenderIdx < targetArray.length - 1) {
+                              setHighlightedTacticalBlock(
+                                targetArray[tacticalRenderIdx + 1].position
+                              );
+                              setTacticalRenderIdx(tacticalRenderIdx + 1);
+                            } else {
+                              setHighlightedTacticalBlock(
+                                targetArray[0].position
+                              );
+                              setTacticalRenderIdx(0);
+                            }
+                          }}
+                        >
+                          Next cat/kitten
+                        </button>
+                        <button
+                          className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded h-16 text-lg"
+                          onClick={() =>
+                            tactical(
+                              activeSide,
+                              setActiveSide,
+                              p1,
+                              setP1,
+                              p2,
+                              setP2,
+                              highlightedTacticalBlock,
+                              p1PoolIdx,
+                              setP1PoolIdx,
+                              p2PoolIdx,
+                              setP2PoolIdx,
+                              setHighlightedTacticalBlock,
+                              setTacticalRenderIdx,
+                              setShowTacticalBlock,
+                              setDisableBoard
+                            )
+                          }
+                        >
+                          Stratigic upgrade
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="hover:bg-[#439A97] bg-[#62B6B7] text-white font-bold py-2 px-4 rounded h-16 text-lg"
+                        onClick={() => {
+                          setSubShowTacticalBlock(true);
+                          setShowPromotionBlock(false);
+                          setHighlightedUpgradeBlocks([]);
+                          const targetArray = activeSide === "p1" ? p1 : p2;
+                          setHighlightedTacticalBlock(targetArray[0].position);
+                          setTacticalRenderIdx(0);
+                        }}
+                      >
+                        Show Upgradable Cat/Kitten
+                      </button>
+                    )}
+                  </div>
+                ) : undefined}
+              </div>
+            </div>
+          )}
         </div>
-        <NotificationContainer />
       </div>
+
+      <NotificationContainer />
     </div>
   );
 }
